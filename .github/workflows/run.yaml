@@ -1,7 +1,8 @@
 name: selenium-github-actions
 on: 
-  push:
   workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * *'  # 毎朝6時（UTC）に実行
 jobs:
   selenium:
     runs-on: ubuntu-latest
