@@ -1,0 +1,48 @@
+name: Check Baseball Ground Availability
+
+on:
+  schedule:
+    # 毎日午前9時に実行
+    - cron: '0 0 * * *'
+  workflow_dispatch:  # 手動実行も可能に
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.13'
+    
+    - name: Install Chrome
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y wget
+        wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+        sudo apt install -y ./google-chrome-stable_current_amd64.deb
+    
+    - name: Install ChromeDriver
+      run: |
+        CHROME_VERSION=$(google-chrome --version | awk '{print $3}' | cut -d'.' -f1)
+        wget -q "https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/$CHROME_VERSION.0.0/linux64/chromedriver-linux64.zip"
+        unzip chromedriver-linux64.zip
+        sudo mv chromedriver-linux64/chromedriver /usr/local/bin/
+        sudo chmod +x /usr/local/bin/chromedriver
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install selenium beautifulsoup4 requests python-dotenv
+    
+    - name: Create .env file
+      run: |
+        echo "BASE_URL=${{ secrets.BASE_URL }}" >> .env
+        echo "LINE_CHANNEL_ACCESS_TOKEN=${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}" >> .env
+        echo "LINE_GROUP_ID=${{ secrets.LINE_GROUP_ID }}" >> .env
+    
+    - name: Run script
+      run: python check_baseball_ground.py 
