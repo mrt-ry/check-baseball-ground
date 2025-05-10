@@ -5,6 +5,10 @@ on:
 jobs:
   selenium:
     runs-on: ubuntu-latest
+    env:
+      BASE_URL: ${{ secrets.BASE_URL }}
+      LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+      LINE_GROUP_ID: ${{ secrets.LINE_GROUP_ID }}
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
