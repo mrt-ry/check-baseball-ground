@@ -27,11 +27,18 @@ jobs:
     
     - name: Install ChromeDriver
       run: |
-        CHROME_VERSION=$(google-chrome --version | awk '{print $3}' | cut -d'.' -f1)
-        wget -q "https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/$CHROME_VERSION.0.0/linux64/chromedriver-linux64.zip"
+        # Chromeのバージョンを取得
+        CHROME_VERSION=$(google-chrome --version | grep -oP '(?<=Google Chrome )[0-9]+')
+        echo "Chrome version: $CHROME_VERSION"
+        
+        # ChromeDriverをダウンロードしてインストール
+        wget -q "https://storage.googleapis.com/chrome-for-testing-public/$CHROME_VERSION.0.0/linux64/chromedriver-linux64.zip"
         unzip chromedriver-linux64.zip
         sudo mv chromedriver-linux64/chromedriver /usr/local/bin/
         sudo chmod +x /usr/local/bin/chromedriver
+        
+        # バージョン確認
+        chromedriver --version
     
     - name: Install dependencies
       run: |
