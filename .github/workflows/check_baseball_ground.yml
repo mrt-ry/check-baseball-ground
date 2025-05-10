@@ -18,11 +18,17 @@ jobs:
       with:
         python-version: '3.13'
     
-    - name: Install Chrome and ChromeDriver
-      uses: nanasess/setup-chromedriver@v2
-      with:
-        # Optional: do not specify to match Chrome's version
-        chromedriver-version: 'latest'
+    - name: Install Chrome
+      uses: browser-actions/setup-chrome@v1
+    
+    - name: Install ChromeDriver
+      uses: nanasess/setup-chromedriver@v2.0.1
+    
+    - name: Start ChromeDriver
+      run: |
+        export DISPLAY=:99
+        chromedriver --url-base=/wd/hub &
+        sudo Xvfb -ac :99 -screen 0 1280x1024x24 > /dev/null 2>&1 &
     
     - name: Install dependencies
       run: |
