@@ -37,9 +37,13 @@ def send_line_message(message):
 
 def init_driver():
     options = Options()
-    options.add_argument('--headless')
+    options.add_argument('--headless=new')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
+    options.add_argument('--disable-gpu')
+    options.add_argument('--window-size=1920,1080')
+    options.add_argument('--disable-extensions')
+    options.add_argument('--disable-software-rasterizer')
     return webdriver.Chrome(options=options)
 
 
@@ -209,16 +213,19 @@ def main():
 
 
 def main_with_retry(max_retries=5):
-    for attempt in range(1, max_retries + 1):
+    for attempt in range(max_retries):
         try:
+            print(f"検索完了")
             main()
             break
         except Exception as e:
-            print(f"[リトライ] {attempt}回目でエラー発生: {repr(e)}")
-            if attempt == max_retries:
-                print("最大リトライ回数に達したため処理を中断します。")
-            else:
+            print(f"[リトライ] {attempt + 1}回目でエラー発生: {type(e).__name__}()")
+            if attempt < max_retries - 1:
                 print("再実行します...")
+                time.sleep(5)  # エラー発生時に5秒待機
+            else:
+                print("最大リトライ回数に達したため処理を中断します。")
+                raise
 
 if __name__ == "__main__":
-    main_with_retry(max_retries=5) 
+    main_with_retry() 
