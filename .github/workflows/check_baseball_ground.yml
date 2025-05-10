@@ -22,7 +22,7 @@ jobs:
       uses: browser-actions/setup-chrome@v1
     
     - name: Install ChromeDriver
-      uses: nanasess/setup-chromedriver@v2.0.1
+      uses: actions/setup-chrome-driver@v1
     
     - name: Start ChromeDriver
       run: |
