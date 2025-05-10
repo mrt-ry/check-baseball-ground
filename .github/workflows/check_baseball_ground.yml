@@ -18,27 +18,11 @@ jobs:
       with:
         python-version: '3.13'
     
-    - name: Install Chrome
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y wget
-        wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
-        sudo apt install -y ./google-chrome-stable_current_amd64.deb
-    
-    - name: Install ChromeDriver
-      run: |
-        # Chromeのバージョンを取得
-        CHROME_VERSION=$(google-chrome --version | grep -oP '(?<=Google Chrome )[0-9]+')
-        echo "Chrome version: $CHROME_VERSION"
-        
-        # ChromeDriverをダウンロードしてインストール
-        wget -q "https://storage.googleapis.com/chrome-for-testing-public/$CHROME_VERSION.0.0/linux64/chromedriver-linux64.zip"
-        unzip chromedriver-linux64.zip
-        sudo mv chromedriver-linux64/chromedriver /usr/local/bin/
-        sudo chmod +x /usr/local/bin/chromedriver
-        
-        # バージョン確認
-        chromedriver --version
+    - name: Install Chrome and ChromeDriver
+      uses: nanasess/setup-chromedriver@v2
+      with:
+        # Optional: do not specify to match Chrome's version
+        chromedriver-version: 'latest'
     
     - name: Install dependencies
       run: |
