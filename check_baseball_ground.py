@@ -18,7 +18,7 @@ BASE_URL = os.getenv("BASE_URL")
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 LINE_GROUP_ID = os.getenv("LINE_GROUP_ID")
 GAME_RECRUITMENT_URL = os.getenv("GAME_RECRUITMENT_URL")
-GITHUB_REPO = os.getenv("GIT_REPO")  # 形式: "username/repository"
+GIT_REPO = os.getenv("GIT_REPO")  # 形式: "username/repository"
 GITHUB_BRANCH = os.getenv("GIT_BRANCH", "main")  # デフォルトはmain
 
 def commit_and_push_screenshot(screenshot_path):
@@ -52,7 +52,7 @@ def commit_and_push_screenshot(screenshot_path):
 
 def get_github_raw_url(screenshot_path):
     """スクリーンショットのGitHub Raw URLを生成"""
-    if not GITHUB_REPO:
+    if not GIT_REPO:
         print("GIT_REPOが設定されていません")
         return None
     
@@ -60,7 +60,7 @@ def get_github_raw_url(screenshot_path):
     filename = os.path.basename(screenshot_path)
     
     # GitHub RawのURL形式: https://raw.githubusercontent.com/{user}/{repo}/{branch}/screenshots/{filename}
-    raw_url = f"https://raw.githubusercontent.com/{GITHUB_REPO}/{GITHUB_BRANCH}/screenshots/{filename}"
+    raw_url = f"https://raw.githubusercontent.com/{GIT_REPO}/{GITHUB_BRANCH}/screenshots/{filename}"
     
     print(f"GitHub Raw URL: {raw_url}")
     return raw_url
