@@ -7,12 +7,21 @@ on:
 jobs:
   selenium:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Gitプッシュのために必要
     env:
       BASE_URL: ${{ secrets.BASE_URL }}
       LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
       LINE_GROUP_ID: ${{ secrets.LINE_GROUP_ID }}
+      GAME_RECRUITMENT_URL: ${{ secrets.GAME_RECRUITMENT_URL }}
+      MANAGEMENT_SCREEN_LOGIN_ID: ${{ secrets.MANAGEMENT_SCREEN_LOGIN_ID }}
+      MANAGEMENT_SCREEN_PASSWORD: ${{ secrets.MANAGEMENT_SCREEN_PASSWORD }}
+      GITHUB_REPO: ${{ secrets.GITHUB_REPO }}
+      GITHUB_BRANCH: ${{ secrets.GITHUB_BRANCH }}
     steps:
       - uses: actions/checkout@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/setup-python@v2
         with:
           python-version: '3.13'
@@ -26,7 +35,11 @@ jobs:
       - name: Install dependencies
         run: |
           pip install get-chrome-driver --upgrade
-          pip install selenium
+          pip install selenium beautifulsoup4 requests python-dotenv pillow
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
       - name: Run script
         run: |
           python check_baseball_ground.py 
