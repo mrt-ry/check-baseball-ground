@@ -344,14 +344,15 @@ def main():
     try:
         park_list = get_park_list(driver, today)
         park_results = {}
-        for park in park_list:
+        # 検証用：最初の公園のみを処理
+        if park_list:
+            park = park_list[0]  # 最初の公園を取得
             try:
                 print(f"\n【{park['name']}】の空き枠検索開始")
                 slots = get_park_availability(driver, park, wait)
                 park_results[park['name']] = slots
             except Exception as e:
                 print(f"公園「{park['name']}」の処理中にエラー: {str(e)}")
-                continue
             finally:
                 driver.get(BASE_URL)
                 wait.until(EC.presence_of_element_located((By.ID, "daystart-home")))
