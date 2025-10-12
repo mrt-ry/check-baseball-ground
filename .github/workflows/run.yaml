@@ -16,8 +16,8 @@ jobs:
       GAME_RECRUITMENT_URL: ${{ secrets.GAME_RECRUITMENT_URL }}
       MANAGEMENT_SCREEN_LOGIN_ID: ${{ secrets.MANAGEMENT_SCREEN_LOGIN_ID }}
       MANAGEMENT_SCREEN_PASSWORD: ${{ secrets.MANAGEMENT_SCREEN_PASSWORD }}
-      GITHUB_REPO: ${{ secrets.GITHUB_REPO }}
-      GITHUB_BRANCH: ${{ secrets.GITHUB_BRANCH }}
+      GITHUB_REPO: ${{ secrets.GIT_REPO }}
+      GITHUB_BRANCH: ${{ secrets.GIT_BRANCH }}
     steps:
       - uses: actions/checkout@v2
         with:

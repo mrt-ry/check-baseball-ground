@@ -18,8 +18,8 @@ BASE_URL = os.getenv("BASE_URL")
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 LINE_GROUP_ID = os.getenv("LINE_GROUP_ID")
 GAME_RECRUITMENT_URL = os.getenv("GAME_RECRUITMENT_URL")
-GITHUB_REPO = os.getenv("GITHUB_REPO")  # 形式: "username/repository"
-GITHUB_BRANCH = os.getenv("GITHUB_BRANCH", "main")  # デフォルトはmain
+GITHUB_REPO = os.getenv("GIT_REPO")  # 形式: "username/repository"
+GITHUB_BRANCH = os.getenv("GIT_BRANCH", "main")  # デフォルトはmain
 
 def commit_and_push_screenshot(screenshot_path):
     """スクリーンショットをGitにコミット＆プッシュ"""
@@ -53,7 +53,7 @@ def commit_and_push_screenshot(screenshot_path):
 def get_github_raw_url(screenshot_path):
     """スクリーンショットのGitHub Raw URLを生成"""
     if not GITHUB_REPO:
-        print("GITHUB_REPOが設定されていません")
+        print("GIT_REPOが設定されていません")
         return None
     
     # ファイル名とディレクトリ名を取得
