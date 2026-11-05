@@ -122,7 +122,12 @@ def init_driver():
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--window-size=1920,3000')  # 縦長のウィンドウサイズ
-    return webdriver.Chrome(options=options)
+    # サイト側が出す alert（「データ通信を正しく行うことができませんでした」等）を自動で閉じる
+    options.unhandled_prompt_behavior = "accept"
+    driver = webdriver.Chrome(options=options)
+    driver.set_page_load_timeout(60)
+    driver.set_script_timeout(30)
+    return driver
 
 
 def get_park_list(driver, date):
@@ -370,7 +375,10 @@ def main():
         print('\n送信メッセージ:')
         print(message)
     finally:
-        driver.quit()
+        try:
+            driver.quit()
+        except Exception as e:
+            print(f"driver.quit()に失敗: {repr(e)}")
         print("\n検索完了")
 
 
@@ -384,8 +392,10 @@ def main_with_retry(max_retries=5):
             traceback.print_exc()
             if attempt == max_retries:
                 print("最大リトライ回数に達したため処理を中断します。")
+                raise SystemExit(1)
             else:
-                print("再実行します...")
+                print("60秒待ってから再実行します...")
+                time.sleep(60)
 
 if __name__ == "__main__":
     main_with_retry(max_retries=5) 
