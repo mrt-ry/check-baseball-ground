@@ -26,12 +26,6 @@ jobs:
         with:
           python-version: '3.13'
           architecture: 'x64'
-      - name: Install Chrome and ChromeDriver
-        uses: browser-actions/setup-chrome@v1
-        with:
-          chrome-version: stable
-          install-chromedriver: true
-          install-dependencies: true
       - name: Install Japanese fonts
         run: |
           sudo apt-get update
