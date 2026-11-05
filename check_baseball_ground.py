@@ -116,6 +116,9 @@ def send_line_message(message, screenshot_path=None):
     return response.status_code == 200
 
 
+PARK_MAX_ATTEMPTS = 3  # 1公園あたりの最大試行回数（初回＋リトライ2回）
+
+
 def init_driver():
     options = Options()
     options.add_argument('--headless')
@@ -351,24 +354,32 @@ def main():
         park_list = get_park_list(driver, today)
         park_results = {}
         for park in park_list:
-            try:
-                print(f"\n【{park['name']}】の空き枠検索開始")
-                slots = get_park_availability(driver, park, wait)
-                park_results[park['name']] = slots
-            except Exception as e:
-                print(f"公園「{park['name']}」の処理中にエラー: {type(e).__name__}: {str(e)}")
+            for attempt in range(1, PARK_MAX_ATTEMPTS + 1):
+                succeeded = False
                 try:
-                    print(f"  現在のURL: {driver.current_url}")
-                    print(f"  ページタイトル: {driver.title}")
-                except Exception as e2:
-                    print(f"  ページ情報の取得失敗: {type(e2).__name__}")
-                traceback.print_exc()
-                continue
-            finally:
-                driver.get(BASE_URL)
-                wait.until(EC.presence_of_element_located((By.ID, "daystart-home")))
-                print(f"ホーム画面に戻る")
-                time.sleep(3)
+                    print(f"\n【{park['name']}】の空き枠検索開始 (試行 {attempt}/{PARK_MAX_ATTEMPTS})")
+                    slots = get_park_availability(driver, park, wait)
+                    park_results[park['name']] = slots
+                    succeeded = True
+                except Exception as e:
+                    print(f"公園「{park['name']}」の処理中にエラー(試行 {attempt}/{PARK_MAX_ATTEMPTS}): {type(e).__name__}: {str(e)}")
+                    try:
+                        print(f"  現在のURL: {driver.current_url}")
+                        print(f"  ページタイトル: {driver.title}")
+                    except Exception as e2:
+                        print(f"  ページ情報の取得失敗: {type(e2).__name__}")
+                    traceback.print_exc()
+                finally:
+                    driver.get(BASE_URL)
+                    wait.until(EC.presence_of_element_located((By.ID, "daystart-home")))
+                    print(f"ホーム画面に戻る")
+                    time.sleep(3)
+                if succeeded:
+                    break
+                if attempt < PARK_MAX_ATTEMPTS:
+                    print(f"公園「{park['name']}」をリトライします")
+                else:
+                    print(f"公園「{park['name']}」は{PARK_MAX_ATTEMPTS}回失敗したためスキップします")
         message = make_line_message(park_results)
 
         # 試合相手の募集ページのスクリーンショットを取得
