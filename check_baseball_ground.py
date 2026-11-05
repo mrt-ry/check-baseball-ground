@@ -370,8 +370,7 @@ def main():
         if screenshot_path:
             print(f"スクリーンショットファイル: {screenshot_path}")
 
-        # TODO: 動作確認のため一時的にコメントアウト（確認後に戻す）
-        # send_line_message(message, screenshot_path)
+        send_line_message(message, screenshot_path)
         print('\n送信メッセージ:')
         print(message)
     finally:
