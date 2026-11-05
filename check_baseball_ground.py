@@ -275,7 +275,8 @@ def time_sort_key(slot):
 
 
 def make_line_message(park_results):
-    lines = ["📣 グラウンドの空き情報\n"]
+    now = datetime.now(JST)
+    lines = [f"📣 グラウンドの空き情報（{now.month}/{now.day} {now.strftime('%H:%M')}時点）\n"]
     for park_name, slots in park_results.items():
         if not slots:
             continue
@@ -286,6 +287,9 @@ def make_line_message(park_results):
             time_hankaku = slot['time'].translate(str.maketrans('０１２３４５６７８９', '0123456789'))
             lines.append(f"・{d.month}/{d.day}({youbi}) {time_hankaku}：{slot['status']}枠")
         lines.append("")
+    if BASE_URL:
+        lines.append("🔗 予約サイト")
+        lines.append(BASE_URL)
     return "\n".join(lines)
 
 # スクリーンショットの保存先ディレクトリ
