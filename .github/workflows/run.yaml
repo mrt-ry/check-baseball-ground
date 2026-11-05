@@ -6,7 +6,7 @@ on:
     - cron: '0 9 * * *'   # 毎日18時（UTC）に実行
 jobs:
   selenium:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write  # Gitプッシュのために必要
     env:
@@ -19,23 +19,24 @@ jobs:
       GIT_REPO: ${{ secrets.GIT_REPO }}
       GITHUB_BRANCH: ${{ secrets.GIT_BRANCH }}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/setup-python@v2
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
           architecture: 'x64'
-      - name: Install Chrome and Japanese fonts
+      - name: Install Chrome and ChromeDriver
+        uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: stable
+          install-chromedriver: true
+      - name: Install Japanese fonts
         run: |
-          wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
-          sudo sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list'
           sudo apt-get update
-          sudo apt-get install -y google-chrome-stable
           sudo apt-get install -y fonts-noto-cjk fonts-noto-cjk-extra
       - name: Install dependencies
         run: |
-          pip install get-chrome-driver --upgrade
           pip install selenium beautifulsoup4 requests python-dotenv pillow
       - name: Configure Git
         run: |
