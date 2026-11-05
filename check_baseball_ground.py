@@ -356,7 +356,13 @@ def main():
                 slots = get_park_availability(driver, park, wait)
                 park_results[park['name']] = slots
             except Exception as e:
-                print(f"公園「{park['name']}」の処理中にエラー: {str(e)}")
+                print(f"公園「{park['name']}」の処理中にエラー: {type(e).__name__}: {str(e)}")
+                try:
+                    print(f"  現在のURL: {driver.current_url}")
+                    print(f"  ページタイトル: {driver.title}")
+                except Exception as e2:
+                    print(f"  ページ情報の取得失敗: {type(e2).__name__}")
+                traceback.print_exc()
                 continue
             finally:
                 driver.get(BASE_URL)
