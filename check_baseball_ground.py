@@ -1,4 +1,5 @@
 import os
+import traceback
 import re
 import time
 import base64
@@ -380,6 +381,7 @@ def main_with_retry(max_retries=5):
             break
         except Exception as e:
             print(f"[リトライ] {attempt}回目でエラー発生: {repr(e)}")
+            traceback.print_exc()
             if attempt == max_retries:
                 print("最大リトライ回数に達したため処理を中断します。")
             else:
