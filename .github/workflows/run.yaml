@@ -7,7 +7,7 @@ on:
 jobs:
   selenium:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 7
     permissions:
       contents: write  # Gitプッシュのために必要
     env:
@@ -40,4 +40,4 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
       - name: Run script
         run: |
-          python check_baseball_ground.py 
+          python -u check_baseball_ground.py 
