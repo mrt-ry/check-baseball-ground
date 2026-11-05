@@ -2,8 +2,8 @@ name: selenium-github-actions
 on: 
   workflow_dispatch:
   schedule:
-    - cron: '23 21 * * *'  # 毎日6:23（JST）狙い。毎時0分は遅延しやすいためずらしている
-    - cron: '47 9 * * *'   # 毎日18:47（JST）狙い
+    - cron: '23 22 * * *'  # 毎日7:23（JST）狙い。毎時0分は遅延しやすいためずらしている
+    - cron: '23 10 * * *'  # 毎日19:23（JST）狙い
 jobs:
   selenium:
     runs-on: ubuntu-24.04
