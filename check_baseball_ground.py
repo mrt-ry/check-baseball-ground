@@ -1,4 +1,6 @@
 import os
+from datetime import timedelta
+from zoneinfo import ZoneInfo
 import traceback
 import re
 import time
@@ -155,7 +157,28 @@ def get_park_list(driver, date):
     return park_list
 
 
-def parse_week_table(html):
+JST = ZoneInfo("Asia/Tokyo")
+WEEKDAY_JA = "月火水木金土日"
+
+
+def resolve_date(day, youbi, today, week_index):
+    """表の見出しの「日」と曜日から、実際の日付(date)を求める。
+
+    week_index週目の見出しは、今日を基準に [today-6+7*i, today+6+7*i] の範囲にある。
+    この範囲は13日間なので「日」の数字だけで一意に決まる。曜日が一致することも確認する。
+    見つからない/曜日が合わない場合はNoneを返す。
+    """
+    start = today - timedelta(days=6) + timedelta(days=7 * week_index)
+    for i in range(13):
+        d = start + timedelta(days=i)
+        if d.day == day and WEEKDAY_JA[d.weekday()] == youbi:
+            return d
+    return None
+
+
+def parse_week_table(html, today=None, week_index=0):
+    if today is None:
+        today = datetime.now(JST).date()
     soup = BeautifulSoup(html, "html.parser")
     table = soup.find("table", {"id": "week-info"})
     if not table:
@@ -176,7 +199,12 @@ def parse_week_table(html):
                 day_span = divs[1].find_all("span", class_="pc-text")
                 day_str = day_span[0].get_text(strip=True) if day_span else ""
                 if day_str in ["土", "日"]:
-                    date_list.append(f"{date_str}({day_str})")
+                    resolved = resolve_date(int(date_str), day_str, today, week_index) if date_str.isdigit() else None
+                    if resolved is None:
+                        print(f"警告: 日付を特定できません: {date_str}({day_str}) 週{week_index + 1}")
+                        date_list.append("")
+                    else:
+                        date_list.append(resolved)
                 else:
                     date_list.append("")
             else:
@@ -203,7 +231,7 @@ def parse_week_table(html):
                     span = cell.find("span")
                     status = span.get_text(strip=True) if span else "空き"
                     result.append({
-                        "date": date_list[col],
+                        "date": date_list[col],  # datetime.date
                         "time": time_list[row],
                         "status": status,
                     })
@@ -226,7 +254,7 @@ def get_park_availability(driver, park, wait):
     wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "table#week-info tbody tr")))
     week_results = []
     for week in range(4):
-        week_results += parse_week_table(driver.page_source)
+        week_results += parse_week_table(driver.page_source, today=datetime.now(JST).date(), week_index=week)
         if week < 3:
             table_html = driver.find_element(By.CSS_SELECTOR, "table#week-info").get_attribute("outerHTML")
             next_btn = wait.until(EC.element_to_be_clickable((By.ID, "next-week")))
@@ -247,22 +275,21 @@ def time_sort_key(slot):
 
 
 def make_line_message(park_results):
-    lines = ["📣 グラウンドの空き情報\n"]
+    now = datetime.now(JST)
+    lines = [f"📣 グラウンドの空き情報（{now.month}/{now.day} {now.strftime('%H:%M')}時点）\n"]
     for park_name, slots in park_results.items():
         if not slots:
             continue
         lines.append(f"【{park_name}】")
         for slot in sorted(slots, key=lambda x: (x["date"], time_sort_key(x))):
-            m = re.match(r"(\d+)[(（](.)[)）]", slot["date"])
-            if m:
-                day = m.group(1)
-                youbi = m.group(2)
-            else:
-                day = slot["date"]
-                youbi = ""
+            d = slot["date"]
+            youbi = WEEKDAY_JA[d.weekday()]
             time_hankaku = slot['time'].translate(str.maketrans('０１２３４５６７８９', '0123456789'))
-            lines.append(f"・{day}日({youbi}) {time_hankaku}：{slot['status']}枠")
+            lines.append(f"・{d.month}/{d.day}({youbi}) {time_hankaku}：{slot['status']}枠")
         lines.append("")
+    if BASE_URL:
+        lines.append("🔗 予約サイト")
+        lines.append(BASE_URL)
     return "\n".join(lines)
 
 # スクリーンショットの保存先ディレクトリ
