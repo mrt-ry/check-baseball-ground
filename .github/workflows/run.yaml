@@ -31,6 +31,7 @@ jobs:
         with:
           chrome-version: stable
           install-chromedriver: true
+          install-dependencies: true
       - name: Install Japanese fonts
         run: |
           sudo apt-get update
