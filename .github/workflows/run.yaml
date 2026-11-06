@@ -1,9 +1,8 @@
 name: selenium-github-actions
 on: 
   workflow_dispatch:
-  schedule:
-    - cron: '23 22 * * *'  # 毎日7:23（JST）狙い。毎時0分は遅延しやすいためずらしている
-    - cron: '23 10 * * *'  # 毎日19:23（JST）狙い
+  # 定期実行は GitHub の schedule ではなく cron-job.org から workflow_dispatch で起動する
+  # （schedule は数時間遅延するため）。毎日 06:40 / 18:40 (JST)
 jobs:
   selenium:
     runs-on: ubuntu-24.04
