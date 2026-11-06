@@ -442,7 +442,8 @@ def main():
         if screenshot_path:
             print(f"スクリーンショットファイル: {screenshot_path}")
 
-        send_line_message(message, screenshot_path)
+        # TEST ONLY
+        # send_line_message(message, screenshot_path)
         print('\n送信メッセージ:')
         print(message)
     finally:
