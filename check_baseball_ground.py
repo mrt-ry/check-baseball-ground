@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -297,13 +298,40 @@ SCREENSHOT_DIR = "screenshots"
 if not os.path.exists(SCREENSHOT_DIR):
     os.makedirs(SCREENSHOT_DIR)
 
+RECRUITMENT_PAGE_LOAD_TIMEOUT = 180  # 募集ページは遅いことがあるため、読み込み待ちを長めにする
+RECRUITMENT_MAX_ATTEMPTS = 2
+
+
 def get_game_recruitment_screenshot(driver):
+    """募集ページのスクリーンショットを取得。失敗したら1回だけやり直す。"""
     if not GAME_RECRUITMENT_URL:
         print("GAME_RECRUITMENT_URLが設定されていないためスキップ")
         return None, None
+    for attempt in range(1, RECRUITMENT_MAX_ATTEMPTS + 1):
+        print(f"\n募集ページのスクリーンショット取得 (試行 {attempt}/{RECRUITMENT_MAX_ATTEMPTS})")
+        data, path = _get_game_recruitment_screenshot_once(driver)
+        if path:
+            return data, path
+        if attempt < RECRUITMENT_MAX_ATTEMPTS:
+            print("5秒待ってからやり直します（ログイン状態をリセット）")
+            time.sleep(5)
+            try:
+                driver.delete_all_cookies()
+            except Exception as e:
+                print(f"cookie削除に失敗: {repr(e)}")
+    return None, None
+
+
+def _get_game_recruitment_screenshot_once(driver):
     try:
-        print(f"\n対戦相手募集ページにアクセス: {GAME_RECRUITMENT_URL}")
-        driver.get(GAME_RECRUITMENT_URL)
+        print(f"対戦相手募集ページにアクセス: {GAME_RECRUITMENT_URL}")
+        driver.set_page_load_timeout(RECRUITMENT_PAGE_LOAD_TIMEOUT)
+        try:
+            driver.get(GAME_RECRUITMENT_URL)
+        except TimeoutException:
+            # 読み込みが終わらなくても、ログインフォームが出ていれば先に進める
+            print(f"警告: ページ読み込みが{RECRUITMENT_PAGE_LOAD_TIMEOUT}秒を超えたため読み込みを中断して続行します")
+            driver.execute_script("window.stop();")
         wait = WebDriverWait(driver, 10)
         
         # ログインフォームの要素を待機
