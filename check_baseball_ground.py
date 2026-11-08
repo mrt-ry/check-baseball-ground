@@ -139,6 +139,26 @@ def init_driver():
     return driver
 
 
+HOME_RETURN_ATTEMPTS = 2
+
+
+def return_to_home(driver, wait):
+    """ホーム画面に戻る。失敗しても例外は出さず、成功したかをTrue/Falseで返す。
+
+    サイトが遅くて戻れないときに、ここでの失敗が全体のやり直しにならないようにする。
+    """
+    for attempt in range(1, HOME_RETURN_ATTEMPTS + 1):
+        try:
+            driver.get(BASE_URL)
+            wait.until(EC.presence_of_element_located((By.ID, "daystart-home")))
+            print("ホーム画面に戻る")
+            time.sleep(3)
+            return True
+        except Exception as e:
+            print(f"ホーム画面に戻れませんでした(試行 {attempt}/{HOME_RETURN_ATTEMPTS}): {type(e).__name__}")
+    return False
+
+
 def get_park_list(driver, date):
     driver.get(BASE_URL)
     wait = WebDriverWait(driver, 20)
@@ -674,9 +694,12 @@ def main():
             park_list = []
         else:
             park_list = get_park_list(driver, today)
+        home_ok = True  # 直前にホーム画面へ戻れたか
         for park in park_list:
             for attempt in range(1, PARK_MAX_ATTEMPTS + 1):
                 succeeded = False
+                if not home_ok:
+                    home_ok = return_to_home(driver, wait)
                 try:
                     print(f"\n【{park['name']}】の空き枠検索開始 (試行 {attempt}/{PARK_MAX_ATTEMPTS})")
                     slots = get_park_availability(driver, park, wait)
@@ -691,10 +714,7 @@ def main():
                         print(f"  ページ情報の取得失敗: {type(e2).__name__}")
                     traceback.print_exc()
                 finally:
-                    driver.get(BASE_URL)
-                    wait.until(EC.presence_of_element_located((By.ID, "daystart-home")))
-                    print(f"ホーム画面に戻る")
-                    time.sleep(3)
+                    home_ok = return_to_home(driver, wait)
                 if succeeded:
                     break
                 if attempt < PARK_MAX_ATTEMPTS:
