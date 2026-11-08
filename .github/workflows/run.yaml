@@ -7,9 +7,9 @@ on:
         type: boolean
         default: false
       dry_run:
-        description: 'LINE通知を送らない（動作確認用）'
+        description: 'LINE通知を送らない（一時的に既定でオン。通知を再開するときは default を false に戻す）'
         type: boolean
-        default: false
+        default: true  # TEMP: 動作確認中のため、入力なしの実行（cron-job.org）でもLINEを送らない
   # 定期実行は GitHub の schedule ではなく cron-job.org から workflow_dispatch で起動する
   # （schedule は数時間遅延するため）。毎日 06:40 / 18:40 (JST)
 jobs:
