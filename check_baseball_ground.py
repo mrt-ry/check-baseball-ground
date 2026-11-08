@@ -378,6 +378,123 @@ def get_toshima_availability(driver, wait):
     return slots
 
 
+SUMIDA_URL = os.getenv("SUMIDA_URL", "https://yoyaku03.city.sumida.lg.jp/user/Home")
+SUMIDA_FACILITY = "公園運動場"  # 施設選択で選ぶ施設
+SUMIDA_ROW_NAME = "錦糸公園野球場"  # 公園運動場の中で対象とする室場（A面・B面）
+SUMIDA_SECTION_NAME = f"墨田区 {SUMIDA_ROW_NAME}"  # 通知の見出し
+SUMIDA_WEEKS = 6  # 先の何週間分を見るか
+SUMIDA_DATE_RE = re.compile(r"(\d{4})年\s*(\d{1,2})月(\d{1,2})日")
+SUMIDA_FACE_RE = re.compile(r"([ＡＢＣＤＥA-E])面")
+# 日付を選ぶ段階: 土日祝（見出しのclassがsat/sun。祝日はsunで表示される）の、空き(vacant)・一部空き(some)の日
+SUMIDA_SELECT_JS = """
+    let n = 0;
+    const heads = [...document.querySelectorAll('table.table-schedule thead th.month')];
+    for (const tr of document.querySelectorAll('table.table-schedule tbody tr')) {
+        const name = tr.querySelector('td');
+        if (!name || !name.textContent.includes(arguments[0])) continue;
+        const cells = [...tr.querySelectorAll('td.btn-group-toggle')];
+        cells.forEach((td, i) => {
+            const head = heads[i];
+            const label = td.querySelector('label');
+            if (!head || !label) return;
+            const weekend = head.classList.contains('sat') || head.classList.contains('sun');
+            const open = label.classList.contains('some') || label.classList.contains('vacant');
+            if (weekend && open) { label.click(); n++; }
+        });
+    }
+    return n;
+"""
+
+
+def parse_sumida_timeslots(html):
+    """墨田区「時間帯別空き状況」ページから、空き(vacant)の枠を取り出す。
+
+    日付ごとのブロック(div.events > div)に、室場(A面/B面)ごとの行があり、
+    各コマは TimeFrom/TimeTo(例: 1630)を持つ。
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    result = []
+    for day in soup.select("div.events > div"):
+        date_el = day.select_one(".events-date")
+        m = SUMIDA_DATE_RE.search(date_el.get_text(" ", strip=True)) if date_el else None
+        if not m:
+            continue
+        d = datetime(int(m.group(1)), int(m.group(2)), int(m.group(3))).date()
+        for group in day.select("div.events-group"):
+            name_el = group.select_one(".room-name span")
+            name = name_el.get_text(strip=True) if name_el else ""
+            if SUMIDA_ROW_NAME not in name:
+                continue
+            fm = SUMIDA_FACE_RE.search(name)
+            face = (fm.group(1) + "面") if fm else name
+            for cell in group.select("div.display-cells > div"):
+                box = cell.select_one("div.btn-group-toggle")
+                if not box or "vacant" not in (box.get("class") or []):
+                    continue
+                t_from = cell.select_one("input[name$=TimeFrom]")
+                t_to = cell.select_one("input[name$=TimeTo]")
+                if not t_from or not t_to:
+                    continue
+                f, t = int(t_from["value"]), int(t_to["value"])
+                result.append({
+                    "date": d,
+                    "face": face,
+                    "time": f"{f // 100}:{f % 100:02d}～{t // 100}:{t % 100:02d}",
+                    "status": "空き",
+                })
+    return result
+
+
+def _click_visible_button(driver, text):
+    """表示中のボタンのうち、文言が一致する最後のものをクリックする。"""
+    buttons = [b for b in driver.find_elements(By.XPATH, f"//button[contains(., '{text}')]") if b.is_displayed()]
+    if not buttons:
+        raise RuntimeError(f"ボタン「{text}」が見つかりません")
+    driver.execute_script("arguments[0].click();", buttons[-1])
+
+
+def _sumida_week_header(driver):
+    return driver.execute_script(
+        "return [...document.querySelectorAll('table.table-schedule thead th.month')]"
+        ".map(t => t.textContent.replace(/\\s+/g, '')).join(',');"
+    )
+
+
+def get_sumida_availability(driver, wait):
+    """墨田区 錦糸公園野球場（A面・B面）の、土日祝の空き枠を取得する。"""
+    print(f"\n【墨田区 {SUMIDA_ROW_NAME}】の空き枠検索開始")
+    driver.get(SUMIDA_URL)
+    wait.until(EC.presence_of_element_located((By.CLASS_NAME, "tab-name")))
+    time.sleep(1)  # Vueの描画待ち
+    # 室場種類から探す → スポーツ施設 → 野球場 → 検索
+    driver.find_element(By.XPATH, "//*[contains(@class,'tab-name') and contains(.,'室場種類から探す')]").click()
+    wait.until(EC.element_to_be_clickable((By.XPATH, "//label[contains(.,'スポーツ施設')]"))).click()
+    wait.until(EC.element_to_be_clickable((By.XPATH, "//label[normalize-space(.)='野球場']"))).click()
+    _click_visible_button(driver, "検索")
+    # 施設選択 → 公園運動場
+    wait.until(EC.element_to_be_clickable((By.XPATH, f"//label[contains(.,'{SUMIDA_FACILITY}')]"))).click()
+    _click_visible_button(driver, "次へ進む")
+    wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "table.table-schedule tbody tr")))
+
+    slots = []
+    for week in range(SUMIDA_WEEKS):
+        header = _sumida_week_header(driver)
+        selected = driver.execute_script(SUMIDA_SELECT_JS, SUMIDA_ROW_NAME)
+        print(f"  {week + 1}週目: 土日祝で空きのある日 {selected}件")
+        if selected:
+            _click_visible_button(driver, "次へ進む")
+            wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "div.events-group")))
+            slots += parse_sumida_timeslots(driver.page_source)
+            _click_visible_button(driver, "前に戻る")  # 同じ週の画面に戻る
+            wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "table.table-schedule tbody tr")))
+        if week < SUMIDA_WEEKS - 1:
+            next_btn = wait.until(EC.presence_of_element_located((By.XPATH, "//button[contains(.,'次の期間')]|//a[contains(.,'次の期間')]")))
+            driver.execute_script("arguments[0].click();", next_btn)
+            wait.until(lambda d: _sumida_week_header(d) != header)
+    print(f"  空き枠: {len(slots)}件")
+    return slots
+
+
 def time_sort_key(slot):
     m = re.match(r"([０-９0-9]+)", slot["time"])
     if m:
@@ -417,7 +534,7 @@ def make_line_message(park_results):
     lines = [f"📣 グラウンドの空き情報（{now.month}/{now.day} {now.strftime('%H:%M')}時点）\n"]
     # 都立公園（既存サイト）→ 豊島区の順に並べる。予約サイトが別なので、それぞれ専用のリンクを付ける
     for park_name, slots in park_results.items():
-        if not slots or park_name == TOSHIMA_SECTION_NAME:
+        if not slots or park_name in (TOSHIMA_SECTION_NAME, SUMIDA_SECTION_NAME):
             continue
         lines.append(f"【{park_name}】")
         lines += format_slot_lines(slots)
@@ -426,12 +543,16 @@ def make_line_message(park_results):
         lines.append("🔗 都立公園の予約サイト")
         lines.append(BASE_URL)
         lines.append("")
-    toshima_slots = park_results.get(TOSHIMA_SECTION_NAME)
-    if toshima_slots:
-        lines.append(f"【{TOSHIMA_SECTION_NAME}】")
-        lines += format_slot_lines(toshima_slots)
-        lines.append("🔗 豊島区の予約サイト")
-        lines.append(TOSHIMA_URL)
+    # 豊島区・墨田区（予約サイトが別なので、それぞれ専用のリンクを付ける）
+    for section_name, section_url in ((TOSHIMA_SECTION_NAME, TOSHIMA_URL), (SUMIDA_SECTION_NAME, SUMIDA_URL)):
+        section_slots = park_results.get(section_name)
+        if not section_slots:
+            continue
+        lines.append(f"【{section_name}】")
+        lines += format_slot_lines(section_slots)
+        lines.append(f"🔗 {section_name.split()[0]}の予約サイト")
+        lines.append(section_url)
+        lines.append("")
     return "\n".join(lines).rstrip("\n")
 
 # スクリーンショットの保存先ディレクトリ
@@ -580,18 +701,22 @@ def main():
                     print(f"公園「{park['name']}」をリトライします")
                 else:
                     print(f"公園「{park['name']}」は{PARK_MAX_ATTEMPTS}回失敗したためスキップします")
-        # 豊島区 総合体育場（既存の取得が失敗しても影響しないよう、独立してリトライ）
-        for attempt in range(1, PARK_MAX_ATTEMPTS + 1):
-            try:
-                park_results[TOSHIMA_SECTION_NAME] = get_toshima_availability(driver, wait)
-                break
-            except Exception as e:
-                print(f"豊島区の処理中にエラー(試行 {attempt}/{PARK_MAX_ATTEMPTS}): {type(e).__name__}: {str(e)}")
-                traceback.print_exc()
-                if attempt < PARK_MAX_ATTEMPTS:
-                    time.sleep(3)
-                else:
-                    print("豊島区は失敗したためスキップします")
+        # 豊島区・墨田区（既存の取得が失敗しても影響しないよう、それぞれ独立してリトライ）
+        for section_name, fetch in (
+            (TOSHIMA_SECTION_NAME, get_toshima_availability),
+            (SUMIDA_SECTION_NAME, get_sumida_availability),
+        ):
+            for attempt in range(1, PARK_MAX_ATTEMPTS + 1):
+                try:
+                    park_results[section_name] = fetch(driver, wait)
+                    break
+                except Exception as e:
+                    print(f"{section_name}の処理中にエラー(試行 {attempt}/{PARK_MAX_ATTEMPTS}): {type(e).__name__}: {str(e)}")
+                    traceback.print_exc()
+                    if attempt < PARK_MAX_ATTEMPTS:
+                        time.sleep(3)
+                    else:
+                        print(f"{section_name}は失敗したためスキップします")
         message = make_line_message(park_results)
 
         if DRY_RUN:
