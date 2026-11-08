@@ -24,6 +24,9 @@ LINE_GROUP_ID = os.getenv("LINE_GROUP_ID")
 GAME_RECRUITMENT_URL = os.getenv("GAME_RECRUITMENT_URL")
 GIT_REPO = os.getenv("GIT_REPO")  # 形式: "username/repository"
 GITHUB_BRANCH = os.getenv("GIT_BRANCH", "main")  # デフォルトはmain
+# 動作確認用の一時スイッチ（通常運用では未設定=無効）
+SKIP_PARKS = os.getenv("SKIP_PARKS", "").lower() == "true"  # 都立公園の取得をスキップ
+DRY_RUN = os.getenv("DRY_RUN", "").lower() == "true"  # LINE通知・スクリーンショットのGitプッシュをしない
 
 def commit_and_push_screenshot(screenshot_path):
     """スクリーンショットをGitにコミット＆プッシュ"""
@@ -266,6 +269,115 @@ def get_park_availability(driver, park, wait):
     return week_results
 
 
+TOSHIMA_URL = os.getenv("TOSHIMA_URL", "https://www2.pf489.com/toshima/WebR/Home/WgR_ModeSelect")
+TOSHIMA_FACILITY = "総合体育場"
+TOSHIMA_SECTION_NAME = f"豊島区 {TOSHIMA_FACILITY}"  # 通知の見出し
+TOSHIMA_ROW_NAME = "野球場"  # 総合体育場の中で対象とする施設（A面・B面がある）
+TOSHIMA_MAX_DATES = 20  # サイト側の1回の選択上限
+TOSHIMA_STATUS = {"○": "空き"}  # 時間帯の「△(施設に問合せ)」は通知しない
+TOSHIMA_DATE_RE = re.compile(r"(\d{4})年(\d{1,2})月(\d{1,2})日")
+
+
+def parse_toshima_timeslots(html):
+    """豊島区「時間帯別空き状況」ページから、空き(○)の枠を取り出す。
+
+    日付ごとに表が1つあり、行がA面/B面、列が時間帯。
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    result = []
+    for table in soup.find_all("table", class_="calendar"):
+        head = table.find("thead")
+        if not head:
+            continue
+        ths = head.find_all("th")
+        m = TOSHIMA_DATE_RE.search(ths[0].get_text()) if ths else None
+        if not m:
+            continue
+        d = datetime(int(m.group(1)), int(m.group(2)), int(m.group(3))).date()
+        times = [th.get_text("", strip=True) for th in ths[2:]]  # 先頭2列は日付・定員
+        body = table.find("tbody")
+        if not body:
+            continue
+        for tr in body.find_all("tr"):
+            tds = tr.find_all("td")
+            if len(tds) < 3:
+                continue
+            face = tds[0].get_text(strip=True)
+            for time_label, td in zip(times, tds[2:]):
+                label = td.find("label")
+                mark = label.get_text(strip=True) if label else ""
+                if mark in TOSHIMA_STATUS:
+                    result.append({
+                        "date": d,
+                        "face": face,
+                        "time": time_label,
+                        "status": TOSHIMA_STATUS[mark],
+                    })
+    return result
+
+
+def get_toshima_availability(driver, wait):
+    """豊島区 総合体育場（野球場 A面・B面）の、土日祝の空き枠を取得する。"""
+    print(f"\n【豊島区 {TOSHIMA_FACILITY}】の空き枠検索開始")
+    driver.get(TOSHIMA_URL)
+    wait.until(EC.presence_of_element_located((By.ID, "category_20")))
+    driver.execute_script("__doPostBack('ssCategory','20');")  # スポーツ施設
+    wait.until(EC.url_contains("WgR_ShisetsuKensaku"))
+    # 施設名のラベルから対象施設のチェックボックスを選ぶ
+    wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "td.shisetsu input[name=checkShisetsu]")))
+    clicked = driver.execute_script("""
+        for (const td of document.querySelectorAll('td.shisetsu')) {
+            const label = td.querySelector('label');
+            if (label && label.textContent.trim() === arguments[0]) {
+                td.querySelector('input[name=checkShisetsu]').click();
+                return true;
+            }
+        }
+        return false;
+    """, TOSHIMA_FACILITY)
+    if not clicked:
+        # 「さらに読み込む」の先にある場合に備え、見つからなければエラーにする
+        raise RuntimeError(f"施設「{TOSHIMA_FACILITY}」が一覧に見つかりません")
+    driver.execute_script("__doPostBack('next','');")
+    wait.until(EC.url_contains("WgR_ShisetsubetsuAkiJoukyou"))
+
+    # 表示条件: 1ヶ月分・土日祝のみ（祝日の判定はサイト側に任せる）
+    old_element = wait.until(EC.presence_of_element_located((By.ID, "radioPeriod1month")))
+    driver.execute_script("""
+        document.getElementById('radioPeriod1month').click();
+        for (const id of ['checkYobi6', 'checkYobi7', 'checkYobi8']) {
+            document.getElementById(id).click();
+        }
+        __doPostBack('hyouji', '');
+    """)
+    wait.until(EC.staleness_of(old_element))  # 再表示でページが読み込み直されるのを待つ
+    wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "table.calendar td.shisetsu")))
+
+    # 野球場の行で、○/△の日付を選ぶ（×・－は選べない）
+    selected = driver.execute_script("""
+        const max = arguments[1];
+        let n = 0;
+        for (const tr of document.querySelectorAll('tr')) {
+            const name = tr.querySelector('td.shisetsu');
+            if (!name || !name.textContent.includes(arguments[0])) continue;
+            for (const input of tr.querySelectorAll('input[name=checkdate]')) {
+                const mark = input.nextElementSibling ? input.nextElementSibling.textContent.trim() : '';
+                if ((mark === '○' || mark === '△') && n < max) { input.click(); n++; }
+            }
+        }
+        return n;
+    """, TOSHIMA_ROW_NAME, TOSHIMA_MAX_DATES)
+    print(f"  空きのある日付: {selected}日")
+    if selected == 0:
+        return []
+    driver.execute_script("__doPostBack('next','');")
+    wait.until(EC.url_contains("WgR_JikantaibetsuAkiJoukyou"))
+    wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "table.calendar tbody tr")))
+    slots = parse_toshima_timeslots(driver.page_source)
+    print(f"  空き枠: {len(slots)}件")
+    return slots
+
+
 def time_sort_key(slot):
     m = re.match(r"([０-９0-9]+)", slot["time"])
     if m:
@@ -275,23 +387,52 @@ def time_sort_key(slot):
     return 0
 
 
+def start_time_label(time_range):
+    """「8:00～10:00」→「8時」、「18:30～20:30」→「18時30分」"""
+    m = re.match(r"\s*(\d{1,2}):(\d{2})", time_range)
+    if not m:
+        return time_range
+    hour, minute = int(m.group(1)), int(m.group(2))
+    return f"{hour}時" if minute == 0 else f"{hour}時{minute}分"
+
+
+def format_slot_lines(slots):
+    lines = []
+    for slot in sorted(slots, key=lambda x: (x["date"], time_sort_key(x), x.get("face", ""))):
+        d = slot["date"]
+        youbi = WEEKDAY_JA[d.weekday()]
+        time_hankaku = slot['time'].translate(str.maketrans('０１２３４５６７８９', '0123456789'))
+        face = slot.get("face")
+        if face:  # 豊島区(総合体育場): A面/B面あり
+            # 既存に合わせ「8時：A面」の形にする（開始時刻のみ。載っている枠はすべて空き）
+            face_hankaku = face.translate(str.maketrans('ＡＢ', 'AB'))
+            lines.append(f"・{d.month}/{d.day}({youbi}) {start_time_label(slot['time'])}：{face_hankaku}")
+        else:
+            lines.append(f"・{d.month}/{d.day}({youbi}) {time_hankaku}：{slot['status']}枠")
+    return lines
+
+
 def make_line_message(park_results):
     now = datetime.now(JST)
     lines = [f"📣 グラウンドの空き情報（{now.month}/{now.day} {now.strftime('%H:%M')}時点）\n"]
+    # 都立公園（既存サイト）→ 豊島区の順に並べる。予約サイトが別なので、それぞれ専用のリンクを付ける
     for park_name, slots in park_results.items():
-        if not slots:
+        if not slots or park_name == TOSHIMA_SECTION_NAME:
             continue
         lines.append(f"【{park_name}】")
-        for slot in sorted(slots, key=lambda x: (x["date"], time_sort_key(x))):
-            d = slot["date"]
-            youbi = WEEKDAY_JA[d.weekday()]
-            time_hankaku = slot['time'].translate(str.maketrans('０１２３４５６７８９', '0123456789'))
-            lines.append(f"・{d.month}/{d.day}({youbi}) {time_hankaku}：{slot['status']}枠")
+        lines += format_slot_lines(slots)
         lines.append("")
     if BASE_URL:
-        lines.append("🔗 予約サイト")
+        lines.append("🔗 都立公園の予約サイト")
         lines.append(BASE_URL)
-    return "\n".join(lines)
+        lines.append("")
+    toshima_slots = park_results.get(TOSHIMA_SECTION_NAME)
+    if toshima_slots:
+        lines.append(f"【{TOSHIMA_SECTION_NAME}】")
+        lines += format_slot_lines(toshima_slots)
+        lines.append("🔗 豊島区の予約サイト")
+        lines.append(TOSHIMA_URL)
+    return "\n".join(lines).rstrip("\n")
 
 # スクリーンショットの保存先ディレクトリ
 SCREENSHOT_DIR = "screenshots"
@@ -406,8 +547,12 @@ def main():
     driver = init_driver()
     wait = WebDriverWait(driver, 20)
     try:
-        park_list = get_park_list(driver, today)
         park_results = {}
+        if SKIP_PARKS:
+            print("SKIP_PARKS=true のため、都立公園の取得をスキップします")
+            park_list = []
+        else:
+            park_list = get_park_list(driver, today)
         for park in park_list:
             for attempt in range(1, PARK_MAX_ATTEMPTS + 1):
                 succeeded = False
@@ -435,7 +580,25 @@ def main():
                     print(f"公園「{park['name']}」をリトライします")
                 else:
                     print(f"公園「{park['name']}」は{PARK_MAX_ATTEMPTS}回失敗したためスキップします")
+        # 豊島区 総合体育場（既存の取得が失敗しても影響しないよう、独立してリトライ）
+        for attempt in range(1, PARK_MAX_ATTEMPTS + 1):
+            try:
+                park_results[TOSHIMA_SECTION_NAME] = get_toshima_availability(driver, wait)
+                break
+            except Exception as e:
+                print(f"豊島区の処理中にエラー(試行 {attempt}/{PARK_MAX_ATTEMPTS}): {type(e).__name__}: {str(e)}")
+                traceback.print_exc()
+                if attempt < PARK_MAX_ATTEMPTS:
+                    time.sleep(3)
+                else:
+                    print("豊島区は失敗したためスキップします")
         message = make_line_message(park_results)
+
+        if DRY_RUN:
+            print("DRY_RUN=true のため、LINE通知とスクリーンショット取得は行いません")
+            print('\n（送信しなかった）メッセージ:')
+            print(message)
+            return
 
         # 試合相手の募集ページのスクリーンショットを取得
         screenshot_data, screenshot_path = get_game_recruitment_screenshot(driver)

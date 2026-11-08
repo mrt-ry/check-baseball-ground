@@ -1,6 +1,15 @@
 name: selenium-github-actions
 on: 
   workflow_dispatch:
+    inputs:
+      skip_parks:
+        description: '都立公園の取得をスキップする（動作確認用）'
+        type: boolean
+        default: false
+      dry_run:
+        description: 'LINE通知を送らない（一時的に既定でオン。通知を再開するときは default を false に戻す）'
+        type: boolean
+        default: true  # TEMP: 動作確認中のため、入力なしの実行（cron-job.org）でもLINEを送らない
   # 定期実行は GitHub の schedule ではなく cron-job.org から workflow_dispatch で起動する
   # （schedule は数時間遅延するため）。毎日 06:40 / 18:40 (JST)
 jobs:
@@ -18,6 +27,8 @@ jobs:
       MANAGEMENT_SCREEN_PASSWORD: ${{ secrets.MANAGEMENT_SCREEN_PASSWORD }}
       GIT_REPO: ${{ secrets.GIT_REPO }}
       GITHUB_BRANCH: ${{ secrets.GIT_BRANCH }}
+      SKIP_PARKS: ${{ inputs.skip_parks }}
+      DRY_RUN: ${{ inputs.dry_run }}
     steps:
       - uses: actions/checkout@v4
         with:
